@@ -9,19 +9,37 @@ use chromiumoxide::{
 use clap::Parser;
 use futures_util::stream::StreamExt;
 use prettify_js::prettyprint;
+use tracing::{debug, error, info};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 struct CliOpts {
     filename: PathBuf,
     #[clap(short, long)]
     output: Option<PathBuf>,
+
+    #[clap(short, long)]
+    verbose: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts = CliOpts::parse();
 
-    eprintln!("Starting Chromiumoxide Debugger...");
+    // Initialize tracing based on verbose flag
+    let filter = if opts.verbose {
+        EnvFilter::new("js_cleanifier=info")
+    } else {
+        EnvFilter::new("js_cleanifier=error,chromiumoxide=off")
+    };
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .with_level(true)
+        .init();
+
+    info!("Starting Chromiumoxide Debugger...");
     let config = BrowserConfig::builder()
         .build()
         .map_err(|e| anyhow::anyhow!("Failed to build browser config: {}", e))?;
@@ -30,7 +48,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         while let Some(h) = handler.next().await {
             if h.is_err() {
-                eprintln!("Handler threw error: {h:?}");
+                debug!("Handler threw error: {h:?}");
             }
         }
     });
@@ -55,27 +73,27 @@ async fn main() -> Result<()> {
     // Execute and hit breakpoint
     match page.evaluate(js_code).await {
         Err(err) => {
-            eprintln!("Error executing JavaScript: {err:?}");
+            debug!("Error executing JavaScript: {err:?}");
             match err {
                 CdpError::JavascriptException(exception) => {
-                    eprintln!("JavaScript Exception: {exception}");
+                    debug!("JavaScript Exception: {exception}");
                     let script_id = match exception.script_id {
                         Some(id) => id,
                         None => {
-                            eprintln!("No script ID found");
+                            error!("No script ID found");
                             return Ok(());
                         }
                     };
                     let source_params = GetScriptSourceParams::new(script_id.clone());
                     let source = page.execute(source_params).await?;
                     if source.script_source.is_empty() {
-                        eprintln!("No source code found for script ID: {script_id:?}");
+                        error!("No source code found for script ID: {script_id:?}");
                         return Err(anyhow::anyhow!(
                             "No source code found for script ID: {script_id:?}"
                         ));
                     }
 
-                    eprintln!("Captured source code from script ID: {script_id:?}");
+                    info!("Captured source code from script ID: {script_id:?}");
 
                     // Prettify the JavaScript source code
                     let (prettified, _source_mappings) = prettyprint(&source.script_source);
@@ -88,22 +106,20 @@ async fn main() -> Result<()> {
                                 anyhow::anyhow!("Failed to write to output file: {}", e)
                             })?;
                     } else {
-                        eprintln!("Successfully prettified JavaScript code");
-                        eprintln!("=== PRETTIFIED JAVASCRIPT SOURCE ===");
+                        info!("Successfully prettified JavaScript code");
                         println!("{prettified}");
-                        eprintln!("=== END PRETTIFIED SOURCE ===");
                     }
                 }
                 _ => {
-                    eprintln!("Other error: {err}");
+                    error!("Other error: {err}");
                 }
             }
         }
         Ok(val) => {
-            eprintln!("I haven't handled this case yet: {val:?}");
+            debug!("I haven't handled this case yet: {val:?}");
         }
     }
 
-    eprintln!("Done!");
+    info!("Done!");
     Ok(())
 }
