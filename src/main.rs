@@ -12,6 +12,33 @@ use prettify_js::prettyprint;
 use tracing::{debug, error, info};
 use tracing_subscriber::EnvFilter;
 
+async fn get_and_prettify_script(js_code: &str, output_path: Option<PathBuf>) -> Result<()> {
+    // For successful execution, we'll prettify the original code since we have it
+    info!("Prettifying the original JavaScript code");
+    
+    // Prettify the JavaScript source code
+    let (prettified, _source_mappings) = prettyprint(js_code);
+    
+    handle_output(prettified, output_path).await?;
+    
+    Ok(())
+}
+
+async fn handle_output(prettified: String, output_path: Option<PathBuf>) -> Result<()> {
+    if let Some(path) = output_path {
+        // Write prettified code to output file
+        tokio::fs::write(path, prettified.clone())
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to write to output file: {}", e)
+            })?;
+    } else {
+        info!("Successfully prettified JavaScript code");
+        println!("{prettified}");
+    }
+    Ok(())
+}
+
 #[derive(Parser, Debug)]
 struct CliOpts {
     filename: PathBuf,
@@ -71,7 +98,7 @@ async fn main() -> Result<()> {
     page.execute(breakpoint).await?;
 
     // Execute and hit breakpoint
-    match page.evaluate(js_code).await {
+    match page.evaluate(js_code.clone()).await {
         Err(err) => {
             debug!("Error executing JavaScript: {err:?}");
             match err {
@@ -98,17 +125,7 @@ async fn main() -> Result<()> {
                     // Prettify the JavaScript source code
                     let (prettified, _source_mappings) = prettyprint(&source.script_source);
 
-                    if let Some(path) = opts.output {
-                        // Write prettified code to output file
-                        tokio::fs::write(path, prettified.clone())
-                            .await
-                            .map_err(|e| {
-                                anyhow::anyhow!("Failed to write to output file: {}", e)
-                            })?;
-                    } else {
-                        info!("Successfully prettified JavaScript code");
-                        println!("{prettified}");
-                    }
+                    handle_output(prettified, opts.output).await?;
                 }
                 _ => {
                     error!("Other error: {err}");
@@ -116,7 +133,9 @@ async fn main() -> Result<()> {
             }
         }
         Ok(val) => {
-            debug!("I haven't handled this case yet: {val:?}");
+            debug!("JavaScript executed successfully: {val:?}");
+            info!("JavaScript execution completed, retrieving and prettifying source code...");
+            get_and_prettify_script(&js_code, opts.output.clone()).await?;
         }
     }
 
