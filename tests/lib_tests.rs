@@ -33,7 +33,7 @@ async fn test_simple_js_code_direct() -> Result<()> {
         simple_js.len(),
         result.len()
     );
-    println!("Output: {}", result);
+    println!("Output: {result}");
 
     Ok(())
 }
@@ -140,7 +140,7 @@ async fn test_malformed_js() -> Result<()> {
         }
         Err(e) => {
             // Graceful error handling is acceptable
-            println!("Malformed JS handled gracefully: {}", e);
+            println!("Malformed JS handled gracefully: {e}");
         }
     }
 
@@ -160,11 +160,11 @@ async fn test_empty_js() -> Result<()> {
     match result {
         Ok(prettified) => {
             // Empty input might produce empty or minimal output
-            println!("Empty JS result: '{}'", prettified);
+            println!("Empty JS result: '{prettified}'");
         }
         Err(e) => {
             // Graceful error handling is acceptable
-            println!("Empty JS handled gracefully: {}", e);
+            println!("Empty JS handled gracefully: {e}");
         }
     }
 
@@ -189,8 +189,7 @@ async fn test_nonexistent_file() -> Result<()> {
             || error_msg.contains("not found")
             || error_msg.contains("cannot find")
             || error_msg.contains("does not exist"),
-        "Should provide meaningful error message for missing file: {}",
-        error_msg
+        "Should provide meaningful error message for missing file: {error_msg}"
     );
 
     Ok(())

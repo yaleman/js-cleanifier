@@ -62,14 +62,14 @@ async fn test_large_js_file() -> Result<()> {
         Err(e) => {
             // If failed, it should be a graceful failure with meaningful error message
             println!("Processing failed (which may be expected for very large files)");
-            println!("Error: {}", e);
+            println!("Error: {e}");
             
             // The failure should not be a panic or crash
             let error_msg = e.to_string();
             assert!(
                 error_msg.contains("Error") || error_msg.contains("Failed") || error_msg.contains("timeout") ||
                 error_msg.contains("Browser") || error_msg.contains("Chrome"),
-                "Failure should be graceful with meaningful error message: {}", error_msg
+                "Failure should be graceful with meaningful error message: {error_msg}"
             );
         }
     }
@@ -137,7 +137,7 @@ async fn test_nonexistent_file() -> Result<()> {
         error_msg.contains("No such file") || error_msg.contains("not found") || 
         error_msg.contains("Error") || error_msg.contains("cannot find") ||
         error_msg.contains("does not exist"),
-        "Should provide meaningful error message for missing file: {}", error_msg
+        "Should provide meaningful error message for missing file: {error_msg}"
     );
     
     Ok(())
@@ -165,7 +165,7 @@ async fn test_invalid_output_path() -> Result<()> {
         error_msg.contains("Failed to write") || error_msg.contains("No such file") || 
         error_msg.contains("Error") || error_msg.contains("Permission denied") ||
         error_msg.contains("cannot create"),
-        "Should provide meaningful error message for invalid output path: {}", error_msg
+        "Should provide meaningful error message for invalid output path: {error_msg}"
     );
     
     Ok(())

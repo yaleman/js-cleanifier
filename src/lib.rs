@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use chromiumoxide::{
@@ -22,9 +22,9 @@ pub struct CleanifyOptions {
 }
 
 impl CleanifyOptions {
-    pub fn new(filename: &PathBuf) -> Self {
+    pub fn new(filename: &Path) -> Self {
         Self {
-            filename: filename.clone(),
+            filename: filename.to_path_buf(),
             output: None,
             verbose: false,
         }
@@ -83,7 +83,7 @@ impl JSCleanifier {
 
         // Set breakpoint
         let breakpoint = SetBreakpointByUrlParams::builder()
-            .line_number(3)
+            .line_number((js_code.lines().count() as u32).saturating_sub(1))
             .url("file://")
             .build()
             .map_err(|e| anyhow::anyhow!("Failed to build breakpoint params: {}", e))?;
