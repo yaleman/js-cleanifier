@@ -144,6 +144,17 @@ docker run --rm -it --security-opt seccomp=unconfined \
   js-cleanifier /data/target.js
 ```
 
+Alternatively the
+[container's built automatically and pushed to GitHub](https://github.com/yaleman/js-cleanifier/pkgs/container/js-cleanifier):
+
+```shell
+docker run --rm -it \
+  --security-opt seccomp=unconfined \
+  --mount "type=bind,src=$(pwd),target=/data" \
+  ghcr.io/yaleman/js-prettifier:latest \
+  /data/target.js
+```
+
 ## Use Cases
 
 - **Debugging Obfuscated Code**: Capture and prettify minified/obfuscated
