@@ -4,6 +4,9 @@ name: "Build container"
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -19,31 +22,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docker:
+  build-amd64:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       - name: Login to GitHub Container Registry
-        # https://github.com/docker/login-action/#github-container-registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
-        id: docker_build
+      - name: Build AMD64
         uses: docker/build-push-action@v6
         with:
-          #  only push to the registry if we are on the main branch
           push: ${{ github.ref == 'refs/heads/main' }}
-          platforms: linux/amd64,linux/arm64
-          # https://github.com/docker/build-push-action/issues/254
-          tags: ghcr.io/${{ github.repository }}:latest
-        if: github.ref == 'refs/heads/main'
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository }}:latest-amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-arm64:
+    runs-on: ubuntu-latest-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build ARM64
+        uses: docker/build-push-action@v6
+        with:
+          push: ${{ github.ref == 'refs/heads/main' }}
+          platforms: linux/arm64
+          tags: ghcr.io/${{ github.repository }}:latest-arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-manifest:
+    runs-on: ubuntu-latest
+    needs: [build-amd64, build-arm64]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create and push manifest
+        run: |
+          docker buildx imagetools create -t ghcr.io/${{ github.repository }}:latest \
+            ghcr.io/${{ github.repository }}:latest-amd64 \
+            ghcr.io/${{ github.repository }}:latest-arm64
