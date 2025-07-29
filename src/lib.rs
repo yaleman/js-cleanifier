@@ -40,15 +40,12 @@ impl CleanifyOptions {
     }
 }
 
+#[derive(Default)]
 pub struct JSCleanifier {
     browser: Option<Browser>,
 }
 
 impl JSCleanifier {
-    pub fn new() -> Self {
-        Self { browser: None }
-    }
-
     pub async fn initialize(&mut self) -> Result<()> {
         info!("Starting Chromiumoxide Debugger...");
         let user_data_dir = tempfile::tempdir()
@@ -164,11 +161,5 @@ impl JSCleanifier {
         }
 
         Ok(())
-    }
-}
-
-impl Default for JSCleanifier {
-    fn default() -> Self {
-        Self::new()
     }
 }

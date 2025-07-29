@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
         .with_level(true)
         .init();
 
-    let mut cleanifier = JSCleanifier::new();
+    let mut cleanifier = JSCleanifier::default();
     cleanifier.initialize().await?;
 
     cleanifier
