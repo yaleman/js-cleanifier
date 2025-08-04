@@ -26,7 +26,7 @@ async fn test_simple_js_code_direct() -> Result<()> {
         "Result should contain console.log"
     );
 
-    // Prettified code might be shorter or longer depending on the prettifier
+    // Prettified code might be shorter or longer depending on the cleanifier
     // Just check that we got some meaningful output
     println!(
         "Input length: {}, Output length: {}",

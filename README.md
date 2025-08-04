@@ -1,6 +1,6 @@
 # JS Cleanifier ='
 
-A Rust-based JavaScript code prettifier that uses Chrome DevTools Protocol to
+A Rust-based JavaScript code cleanifier that uses Chrome DevTools Protocol to
 capture and beautify JavaScript source code from runtime exceptions.
 
 ## Overview
@@ -55,7 +55,7 @@ cargo run -- path/to/your/script.js --verbose
 
 ### Command Line Options
 
-```
+```text
 js-cleanifier [OPTIONS] <FILENAME>
 
 Arguments:
@@ -151,7 +151,7 @@ Alternatively the
 docker run --rm -it \
   --security-opt seccomp=unconfined \
   --mount "type=bind,src=$(pwd),target=/data" \
-  ghcr.io/yaleman/js-prettifier:latest \
+  ghcr.io/yaleman/js-cleanifier:latest \
   /data/target.js
 ```
 

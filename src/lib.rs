@@ -51,8 +51,19 @@ impl JSCleanifier {
         let user_data_dir = tempfile::tempdir()
             .map_err(|e| anyhow::anyhow!("Failed to create temporary directory: {}", e))?;
         let config = BrowserConfig::builder()
+            .no_sandbox()
+            .incognito()
             .disable_cache()
             .user_data_dir(user_data_dir.path())
+            .args(vec![
+                "--no-first-run",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--disable-default-apps",
+                "--disable-sync",
+            ])
             .build()
             .map_err(|e| anyhow::anyhow!("Failed to build browser config: {}", e))?;
         let (browser, mut handler) = Browser::launch(config).await?;

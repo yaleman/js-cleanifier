@@ -6,22 +6,25 @@ default:
 
 # Build the Docker image
 build:
-    docker buildx build -t ghcr.io/yaleman/js-prettifier:latest .
+    docker buildx build -t ghcr.io/yaleman/js-cleanifier:latest .
 
 # buildx build with no cache
 build-clean:
-    docker buildx build --no-cache -t ghcr.io/yaleman/js-prettifier:latest .
+    docker buildx build --no-cache -t ghcr.io/yaleman/js-cleanifier:latest .
 
 
 # Run the Docker container
 run:
     docker run --rm -it \
+        --name js-cleanifier \
         -p 9222:9222 \
-        --security-opt seccomp=unconfined \
-        --mount "type=bind,src=$(pwd),target=/data" ghcr.io/yaleman/js-prettifier:latest /data/target.js
+        --mount "type=bind,src=$(pwd),target=/data" ghcr.io/yaleman/js-cleanifier:latest /data/target.js
 
 # Build and run in one command
 build-run: build run
+
+# Build the container without cache, and run in one command
+build-clean-run: build-clean run
 
 # Build locally with cargo
 cargo-build:

@@ -34,14 +34,16 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \
+    chromium-sandbox \
     ca-certificates \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for running the application
 RUN groupadd -r appuser && useradd -r -g appuser -G audio,video appuser \
-    && mkdir -p /home/appuser/Downloads \
-    && chown -R appuser:appuser /home/appuser
+    && mkdir -p /home/appuser/Downloads /home/appuser/.cache /home/appuser/.local /tmp/.X11-unix \
+    && chown -R appuser:appuser /home/appuser \
+    && chmod 1777 /tmp/.X11-unix
 
 # Set working directory
 WORKDIR /app
@@ -49,15 +51,19 @@ WORKDIR /app
 # Copy the built binary from the builder stage
 COPY --from=builder /app/target/release/js-cleanifier ./js-cleanifier
 
-# Make the binary executable
-RUN chmod +x "./js-cleanifier"
+# Make the binary executable and ensure proper ownership
+RUN chmod +x "./js-cleanifier" \
+    && chown appuser:appuser "./js-cleanifier"
+
+# Create temp directory with proper permissions
+RUN mkdir -p /tmp/chromium-data \
+    && chown -R appuser:appuser /tmp/chromium-data \
+    && chmod 755 /tmp/chromium-data
 
 # Switch to non-root user
 USER appuser
 
-# Set Chrome/Chromium path environment variable
-ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --disable-extensions --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --remote-debugging-port=9222"
+ENV DISPLAY=:99
 
 # Expose debugging port (optional)
 EXPOSE 9222
