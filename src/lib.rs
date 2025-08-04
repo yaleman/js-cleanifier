@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use chromiumoxide::{
     Browser, BrowserConfig,
+    browser::HeadlessMode,
     cdp::js_protocol::debugger::{GetScriptSourceParams, SetBreakpointByUrlParams},
     error::CdpError,
 };
@@ -11,7 +12,7 @@ use futures_util::stream::StreamExt;
 use prettify_js::prettyprint;
 use tracing::{debug, error, info};
 
-#[derive(Debug, Clone, Parser)]
+#[derive(Debug, Clone, Parser, Default)]
 pub struct CleanifyOptions {
     pub filename: PathBuf,
     #[clap(short, long)]
@@ -19,14 +20,16 @@ pub struct CleanifyOptions {
 
     #[clap(short, long)]
     pub verbose: bool,
+
+    #[clap(long, short = 'D', env)]
+    pub disable_sandbox: bool,
 }
 
 impl CleanifyOptions {
     pub fn new(filename: &Path) -> Self {
         Self {
             filename: filename.to_path_buf(),
-            output: None,
-            verbose: false,
+            ..CleanifyOptions::default()
         }
     }
 }
@@ -46,12 +49,12 @@ pub struct JSCleanifier {
 }
 
 impl JSCleanifier {
-    pub async fn initialize(&mut self) -> Result<()> {
+    pub async fn initialize(&mut self, config: &CleanifyOptions) -> Result<()> {
         info!("Starting Chromiumoxide Debugger...");
         let user_data_dir = tempfile::tempdir()
             .map_err(|e| anyhow::anyhow!("Failed to create temporary directory: {}", e))?;
-        let config = BrowserConfig::builder()
-            .no_sandbox()
+        let mut browser_config = BrowserConfig::builder()
+            .headless_mode(HeadlessMode::New)
             .incognito()
             .disable_cache()
             .user_data_dir(user_data_dir.path())
@@ -63,10 +66,16 @@ impl JSCleanifier {
                 "--disable-extensions",
                 "--disable-default-apps",
                 "--disable-sync",
-            ])
+            ]);
+
+        if config.disable_sandbox {
+            browser_config = browser_config.no_sandbox();
+        }
+
+        let browser_config = browser_config
             .build()
             .map_err(|e| anyhow::anyhow!("Failed to build browser config: {}", e))?;
-        let (browser, mut handler) = Browser::launch(config).await?;
+        let (browser, mut handler) = Browser::launch(browser_config).await?;
 
         tokio::spawn(async move {
             while let Some(h) = handler.next().await {

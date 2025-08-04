@@ -34,16 +34,16 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \
-    chromium-sandbox \
     ca-certificates \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for running the application
-RUN groupadd -r appuser && useradd -r -g appuser -G audio,video appuser \
-    && mkdir -p /home/appuser/Downloads /home/appuser/.cache /home/appuser/.local /tmp/.X11-unix \
-    && chown -R appuser:appuser /home/appuser \
-    && chmod 1777 /tmp/.X11-unix
+RUN groupadd -r appuser && \
+    useradd -r -g appuser -G audio,video appuser && \
+    mkdir -p /home/appuser/Downloads /home/appuser/.cache /home/appuser/.local /tmp/.X11-unix && \
+    chown -R appuser:appuser /home/appuser && \
+    chmod 1777 /tmp/.X11-unix
 
 # Set working directory
 WORKDIR /app
@@ -64,7 +64,8 @@ RUN mkdir -p /tmp/chromium-data \
 USER appuser
 
 ENV DISPLAY=:99
-
+# because things get weird in docker land
+ENV DISABLE_SANDBOX=true
 # Expose debugging port (optional)
 EXPOSE 9222
 

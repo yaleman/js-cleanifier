@@ -7,7 +7,7 @@ use tempfile::TempDir;
 #[tokio::test]
 async fn test_simple_js_code_direct() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let simple_js = r#"function hello_world() {
     console.log("Hello, World!");
@@ -47,7 +47,7 @@ async fn test_simple_js_file_direct() -> Result<()> {
     );
 
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let result = cleanifier.cleanify_file(&testfile_path).await?;
 
@@ -81,10 +81,9 @@ async fn test_file_to_output_direct() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let output_path = temp_dir.path().join("output.js");
 
-    let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
-
     let options = CleanifyOptions::new(&testfile_path).with_output(output_path.clone());
+    let mut cleanifier = JSCleanifier::default();
+    cleanifier.initialize(&options).await?;
     cleanifier
         .cleanify_file_to_output(&testfile_path, &options)
         .await?;
@@ -108,7 +107,7 @@ async fn test_file_to_output_direct() -> Result<()> {
 #[tokio::test]
 async fn test_verbose_option() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let simple_js = "console.log('test');";
 
@@ -123,7 +122,7 @@ async fn test_verbose_option() -> Result<()> {
 #[tokio::test]
 async fn test_malformed_js() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let malformed_js = "function incomplete() { console.log('missing brace'";
 
@@ -150,7 +149,7 @@ async fn test_malformed_js() -> Result<()> {
 #[tokio::test]
 async fn test_empty_js() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let empty_js = "";
 
@@ -174,7 +173,7 @@ async fn test_empty_js() -> Result<()> {
 #[tokio::test]
 async fn test_nonexistent_file() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let nonexistent_path = PathBuf::from("nonexistent_file.js");
 
@@ -198,7 +197,7 @@ async fn test_nonexistent_file() -> Result<()> {
 #[tokio::test]
 async fn test_complex_js() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let complex_js = r#"
 const obj = {

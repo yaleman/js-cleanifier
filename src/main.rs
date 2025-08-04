@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
         .init();
 
     let mut cleanifier = JSCleanifier::default();
-    cleanifier.initialize().await?;
+    cleanifier.initialize(&opts).await?;
 
     cleanifier
         .cleanify_file_to_output(&opts.filename, &opts)
