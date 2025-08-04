@@ -4,45 +4,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Rust project that demonstrates JavaScript debugging using chromiumoxide (a Chrome DevTools Protocol implementation). The project launches a headless Chrome browser, sets breakpoints in JavaScript code, and attempts to debug JavaScript execution from Rust.
+This is a Rust CLI application that prettifies JavaScript code using chromiumoxide (Chrome DevTools Protocol implementation). The tool loads JavaScript files, executes them in a headless Chrome browser to capture source code through debugging APIs, and then prettifies the code using the prettify-js library.
 
 ## Build and Development Commands
 
 ### Rust Development
 - `cargo build` - Build the Rust project
-- `cargo run` - Run the main Rust application 
+- `cargo run -- <filename>` - Run the CLI tool on a JavaScript file
 - `cargo check` - Check code without building
-- `cargo test` - Run tests (if any are added)
+- `cargo test` - Run tests
 
 ### Code Quality
 - Use `cargo clippy` for linting
 - Use `cargo fmt` for code formatting
 
+## CLI Usage
+
+The tool accepts the following arguments:
+- `filename` - Path to the JavaScript file to prettify (required)
+- `-o, --output <path>` - Output file path (optional, prints to stdout if not specified)
+- `-v, --verbose` - Enable verbose logging
+
+Example usage:
+```bash
+cargo run -- input.js -o output.js -v
+```
+
 ## Architecture
 
 ### Core Components
-- **src/main.rs**: Main Rust application that launches Chrome via chromiumoxide, enables debugging protocols, sets breakpoints, and executes JavaScript code
-- **chromiumoxide integration**: Uses Chrome DevTools Protocol to control browser instance and debug JavaScript execution
-- **JavaScript files**: Large generated/compiled JS files (target.js, expanded.js) that appear to be build artifacts
+- **src/main.rs**: CLI entry point that parses arguments and initializes the cleanifier
+- **src/lib.rs**: Main library containing the JSCleanifier struct and CleanifyOptions
+- **JSCleanifier**: Core struct that manages Chrome browser instance and JavaScript prettification
+- **CleanifyOptions**: Configuration struct for CLI arguments
 
 ### Key Dependencies
 - `chromiumoxide 0.7.0`: Chrome DevTools Protocol client for Rust
-- `tokio 1.47.0`: Async runtime for handling browser communication
-- `serde_json 1.0.141`: JSON serialization for DevTools messages
+- `tokio 1.47.1`: Async runtime for browser operations
+- `prettify-js 0.1.0`: JavaScript prettification library
+- `clap 4.5.42`: Command-line argument parsing
+- `anyhow 1.0.98`: Error handling
+- `tracing/tracing-subscriber`: Logging framework
 
 ### Project Structure
-The project mixes Rust (main application) with JavaScript debugging capabilities. The HTML file serves as a test harness, while the Rust code programmatically controls browser debugging sessions.
+- **Binary**: `src/main.rs` - CLI interface
+- **Library**: `src/lib.rs` - Core functionality
+- The project is structured as both a binary and library crate
 
-## Known Issues
-- Line 32-36 in main.rs has incomplete breakpoint setup (missing imports for SetBreakpointByUrlParams)
-- Line 43 references hardcoded "script-id-here" which needs to be obtained from debugger events
-- GetScriptSourceParams import is missing
+## JavaScript Prettification Workflow
+1. Initialize headless Chrome browser with temporary user data directory
+2. Create new page and enable debugging/runtime protocols
+3. Set breakpoint at end of JavaScript code
+4. Execute JavaScript code in browser
+5. Capture source code through debugging APIs (either from exceptions or original input)
+6. Prettify captured source using prettify-js library
+7. Output prettified code to file or stdout
 
-## JavaScript Debugging Workflow
-1. Rust app launches Chrome with debugging enabled
-2. Sets breakpoints in inline JavaScript code
-3. Executes JavaScript and pauses at breakpoints
-4. Retrieves source code and debugging information via DevTools Protocol
+## Implementation Details
+- Uses temporary directories for Chrome user data to avoid conflicts
+- Handles both successful JavaScript execution and exceptions
+- Extracts script source from Chrome's debugging APIs when JavaScript throws exceptions
+- Falls back to prettifying original input for successful executions
+- Supports verbose logging for debugging browser interactions
 
 ## Claude Instructions
-- Don't try and consume any javascript files from this repository
+- This is a working JavaScript prettification tool, not a debugging demonstration
+- The Chrome integration is used to capture and prettify JavaScript source code
+- Focus on the JSCleanifier implementation in src/lib.rs for core functionality
