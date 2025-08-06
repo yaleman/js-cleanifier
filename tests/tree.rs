@@ -9,4 +9,6 @@ fn test_tree_walker() {
     dbg!(&src);
     dbg!(&output_string);
     assert!(!output_string.contains("\\x"));
+    assert!(output_string.contains("document"));
+    assert!(output_string.contains("characterSet"));
 }
