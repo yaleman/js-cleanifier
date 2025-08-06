@@ -1,3 +1,5 @@
+use std::io;
+
 use anyhow::Result;
 use clap::Parser;
 use js_cleanifier::{CleanifyOptions, JSCleanifier};
@@ -18,6 +20,7 @@ async fn main() -> Result<()> {
         .with_env_filter(filter)
         .with_target(true)
         .with_level(true)
+        .with_writer(io::stderr)
         .init();
 
     let mut cleanifier = JSCleanifier::default();

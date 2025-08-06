@@ -66,8 +66,9 @@ USER appuser
 ENV DISPLAY=:99
 # because things get weird in docker land
 ENV DISABLE_SANDBOX=true
+ENV PATH="/app/:${PATH}"
 # Expose debugging port (optional)
 EXPOSE 9222
-
+WORKDIR /data
 # Run the application
-ENTRYPOINT ["./js-cleanifier"]
+ENTRYPOINT ["/app/js-cleanifier"]

@@ -6,3 +6,5 @@
 .envrc
 *.asc
 target/
+*.js
+*.html

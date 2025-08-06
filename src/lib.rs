@@ -115,7 +115,7 @@ impl JSCleanifier {
                 debug!("Error executing JavaScript: {err:?}");
                 match err {
                     CdpError::JavascriptException(exception) => {
-                        debug!("JavaScript Exception: {exception}");
+                        info!("JavaScript Exception: {exception}");
                         let script_id = match exception.script_id {
                             Some(id) => id,
                             None => {
