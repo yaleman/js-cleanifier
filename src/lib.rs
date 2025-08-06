@@ -4,7 +4,10 @@ use anyhow::Result;
 use chromiumoxide::{
     Browser, BrowserConfig,
     browser::HeadlessMode,
-    cdp::js_protocol::debugger::{GetScriptSourceParams, SetBreakpointByUrlParams},
+    cdp::js_protocol::{
+        debugger::{GetScriptSourceParams, SetBreakpointByUrlParams},
+        runtime::ScriptId,
+    },
     error::CdpError,
 };
 use clap::Parser;
@@ -23,6 +26,9 @@ pub struct CleanifyOptions {
 
     #[clap(long, short = 'D', env)]
     pub disable_sandbox: bool,
+
+    #[clap(long, short)]
+    pub try_harder: bool,
 }
 
 impl CleanifyOptions {
@@ -89,7 +95,7 @@ impl JSCleanifier {
         Ok(())
     }
 
-    pub async fn cleanify_js_code(&self, js_code: &str) -> Result<String> {
+    pub async fn cleanify_js_code(&self, js_code: &str, try_harder: bool) -> Result<String> {
         let browser = self
             .browser
             .as_ref()
@@ -123,20 +129,54 @@ impl JSCleanifier {
                                 return Err(anyhow::anyhow!("No script ID found"));
                             }
                         };
-                        let source_params = GetScriptSourceParams::new(script_id.clone());
-                        let source = page.execute(source_params).await?;
-                        if source.script_source.is_empty() {
-                            error!("No source code found for script ID: {script_id:?}");
-                            return Err(anyhow::anyhow!(
-                                "No source code found for script ID: {script_id:?}"
-                            ));
+                        if try_harder {
+                            let mut collected_source = String::new();
+                            let mut found_any = false;
+
+                            for script_id_num in 0..1024 {
+                                let script_id = ScriptId::from(script_id_num.to_string());
+                                let source_params = GetScriptSourceParams::new(script_id.clone());
+
+                                if let Ok(source) = page.execute(source_params).await {
+                                    if !source.script_source.is_empty() {
+                                        info!("Found source code for script ID: {script_id:?}");
+                                        collected_source
+                                            .push_str(&format!("// Script ID: {script_id:?}\n\n"));
+                                        let (source, _source_map) =
+                                            prettyprint(&source.script_source);
+                                        collected_source.push_str(&source);
+
+                                        collected_source.push_str("\n\n");
+                                        found_any = true;
+                                    }
+                                }
+                            }
+
+                            if !found_any {
+                                error!("No source code found after trying script IDs 0..128");
+                                return Err(anyhow::anyhow!(
+                                    "No source code found after trying script IDs 0..128"
+                                ));
+                            }
+                            info!("Collected source code from multiple script IDs");
+
+                            Ok(collected_source)
+                        } else {
+                            let source_params = GetScriptSourceParams::new(script_id.clone());
+                            let source = page.execute(source_params).await?;
+                            if source.script_source.is_empty() {
+                                error!("No source code found for script ID: {script_id:?}");
+                                return Err(anyhow::anyhow!(
+                                    "No source code found for script ID: {script_id:?}"
+                                ));
+                            }
+
+                            info!("Captured source code from script ID: {script_id:?}");
+
+                            // Prettify the JavaScript source code
+                            let (prettified, _source_mappings) = prettyprint(&source.script_source);
+                            Ok(prettified)
                         }
-
-                        info!("Captured source code from script ID: {script_id:?}");
-
-                        // Prettify the JavaScript source code
-                        let (prettified, _source_mappings) = prettyprint(&source.script_source);
-                        Ok(prettified)
                     }
                     _ => {
                         error!("Other error: {err}");
@@ -158,9 +198,9 @@ impl JSCleanifier {
         }
     }
 
-    pub async fn cleanify_file(&self, input_path: &PathBuf) -> Result<String> {
+    pub async fn cleanify_file(&self, input_path: &PathBuf, try_harder: bool) -> Result<String> {
         let js_code = tokio::fs::read_to_string(input_path).await?;
-        self.cleanify_js_code(&js_code).await
+        self.cleanify_js_code(&js_code, try_harder).await
     }
 
     pub async fn cleanify_file_to_output(
@@ -168,7 +208,7 @@ impl JSCleanifier {
         input_path: &PathBuf,
         options: &CleanifyOptions,
     ) -> Result<()> {
-        let prettified = self.cleanify_file(input_path).await?;
+        let prettified = self.cleanify_file(input_path, options.try_harder).await?;
 
         if let Some(output_path) = &options.output {
             // Write prettified code to output file

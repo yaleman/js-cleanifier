@@ -112,7 +112,7 @@ async fn test_output_to_stdout() -> Result<()> {
     cleanifier.initialize(&options).await?;
 
     // Capture stdout by getting the result directly instead of relying on println!
-    let result = cleanifier.cleanify_file(&testfile_path).await?;
+    let result = cleanifier.cleanify_file(&testfile_path, false).await?;
 
     // Should contain prettified JavaScript
     assert!(
@@ -136,7 +136,7 @@ async fn test_verbose_flag() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
     cleanifier.initialize(&options).await?;
 
-    let result = cleanifier.cleanify_file(&testfile_path).await?;
+    let result = cleanifier.cleanify_file(&testfile_path, false).await?;
 
     // Should succeed and produce valid output
     assert!(!result.is_empty(), "Result should not be empty");
@@ -157,7 +157,7 @@ async fn test_nonexistent_file() -> Result<()> {
     cleanifier.initialize(&CleanifyOptions::default()).await?;
 
     let nonexistent_path = PathBuf::from("nonexistent_file.js");
-    let result = cleanifier.cleanify_file(&nonexistent_path).await;
+    let result = cleanifier.cleanify_file(&nonexistent_path, false).await;
 
     // Should fail gracefully for non-existent files
     assert!(result.is_err(), "Should fail for non-existent file");

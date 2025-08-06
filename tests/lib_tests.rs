@@ -13,7 +13,7 @@ async fn test_simple_js_code_direct() -> Result<()> {
     console.log("Hello, World!");
 }"#;
 
-    let result = cleanifier.cleanify_js_code(simple_js).await?;
+    let result = cleanifier.cleanify_js_code(simple_js, false).await?;
 
     // The result should be prettified JavaScript
     assert!(!result.is_empty(), "Result should not be empty");
@@ -49,7 +49,7 @@ async fn test_simple_js_file_direct() -> Result<()> {
     let mut cleanifier = JSCleanifier::default();
     cleanifier.initialize(&CleanifyOptions::default()).await?;
 
-    let result = cleanifier.cleanify_file(&testfile_path).await?;
+    let result = cleanifier.cleanify_file(&testfile_path, false).await?;
 
     // The result should be prettified JavaScript
     assert!(!result.is_empty(), "Result should not be empty");
@@ -111,7 +111,7 @@ async fn test_verbose_option() -> Result<()> {
 
     let simple_js = "console.log('test');";
 
-    let result = cleanifier.cleanify_js_code(simple_js).await?;
+    let result = cleanifier.cleanify_js_code(simple_js, false).await?;
 
     assert!(!result.is_empty(), "Result should not be empty");
     assert!(result.contains("console"), "Result should contain console");
@@ -126,7 +126,7 @@ async fn test_malformed_js() -> Result<()> {
 
     let malformed_js = "function incomplete() { console.log('missing brace'";
 
-    let result = cleanifier.cleanify_js_code(malformed_js).await;
+    let result = cleanifier.cleanify_js_code(malformed_js, false).await;
 
     // This might succeed or fail depending on how the browser handles it
     // Either way, it shouldn't panic
@@ -153,7 +153,7 @@ async fn test_empty_js() -> Result<()> {
 
     let empty_js = "";
 
-    let result = cleanifier.cleanify_js_code(empty_js).await;
+    let result = cleanifier.cleanify_js_code(empty_js, false).await;
 
     // Empty JS might succeed with empty output or fail gracefully
     match result {
@@ -177,7 +177,7 @@ async fn test_nonexistent_file() -> Result<()> {
 
     let nonexistent_path = PathBuf::from("nonexistent_file.js");
 
-    let result = cleanifier.cleanify_file(&nonexistent_path).await;
+    let result = cleanifier.cleanify_file(&nonexistent_path, false).await;
 
     // Should fail gracefully for non-existent files
     assert!(result.is_err(), "Should fail for non-existent file");
@@ -221,7 +221,7 @@ async function asyncFunc() {
 }
 "#;
 
-    let result = cleanifier.cleanify_js_code(complex_js).await?;
+    let result = cleanifier.cleanify_js_code(complex_js, false).await?;
 
     assert!(!result.is_empty(), "Result should not be empty");
     assert!(
