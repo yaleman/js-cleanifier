@@ -1,6 +1,6 @@
 [package]
 name = "js-cleanifier"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 
 [[bin]]
@@ -22,6 +22,8 @@ tempfile = "3.13.0"
 tokio = { version = "1.47.1", features = ["macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tree-sitter = "0.25.8"
+tree-sitter-javascript = "0.23.1"
 
 [dev-dependencies]
 tempfile = "3.13.0"

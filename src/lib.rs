@@ -1,3 +1,5 @@
+pub mod tree;
+
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -14,6 +16,8 @@ use clap::Parser;
 use futures_util::stream::StreamExt;
 use prettify_js::prettyprint;
 use tracing::{debug, error, info};
+
+use crate::tree::tree_walker;
 
 #[derive(Debug, Clone, Parser, Default)]
 pub struct CleanifyOptions {
@@ -209,6 +213,11 @@ impl JSCleanifier {
         options: &CleanifyOptions,
     ) -> Result<()> {
         let prettified = self.cleanify_file(input_path, options.try_harder).await?;
+
+        let prettified = tree_walker(&prettified).map_err(|e| {
+            error!("Failed to walk the tree: {}", e);
+            anyhow::anyhow!("Tree walking failed: {}", e)
+        })?;
 
         if let Some(output_path) = &options.output {
             // Write prettified code to output file

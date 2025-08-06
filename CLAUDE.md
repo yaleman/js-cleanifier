@@ -5,11 +5,11 @@ code in this repository.
 
 ## Project Overview
 
-This is a Rust CLI application that prettifies JavaScript code using
-chromiumoxide (Chrome DevTools Protocol implementation). The tool loads
+This is a Rust CLI application that prettifies and deobfuscates JavaScript code using
+chromiumoxide (Chrome DevTools Protocol implementation) and tree-sitter. The tool loads
 JavaScript files, executes them in a headless Chrome browser to capture source
-code through debugging APIs, and then prettifies the code using the prettify-js
-library.
+code through debugging APIs, prettifies the code using the prettify-js
+library, and then performs AST-based deobfuscation using tree-sitter.
 
 ## Build and Development Commands
 
@@ -115,6 +115,7 @@ without requiring privileged mode or additional security options.
   cleanifier
 - **src/lib.rs**: Main library containing the JSCleanifier struct and
   CleanifyOptions
+- **src/tree.rs**: Tree-sitter based AST processing for deobfuscation
 - **JSCleanifier**: Core struct that manages Chrome browser instance and
   JavaScript prettification
 - **CleanifyOptions**: Configuration struct for CLI arguments
@@ -124,6 +125,8 @@ without requiring privileged mode or additional security options.
 - `chromiumoxide 0.7.0`: Chrome DevTools Protocol client for Rust
 - `tokio 1.47.1`: Async runtime for browser operations
 - `prettify-js 0.1.0`: JavaScript prettification library
+- `tree-sitter 0.25.8`: Parser generator for syntax trees
+- `tree-sitter-javascript 0.23.1`: JavaScript grammar for tree-sitter
 - `clap 4.5.42`: Command-line argument parsing
 - `anyhow 1.0.98`: Error handling
 - `tracing/tracing-subscriber`: Logging framework
@@ -132,9 +135,10 @@ without requiring privileged mode or additional security options.
 
 - **Binary**: `src/main.rs` - CLI interface
 - **Library**: `src/lib.rs` - Core functionality
+- **Tree Walker**: `src/tree.rs` - AST-based deobfuscation
 - The project is structured as both a binary and library crate
 
-## JavaScript Prettification Workflow
+## JavaScript Prettification and Deobfuscation Workflow
 
 1. Initialize headless Chrome browser with temporary user data directory
 2. Create new page and enable debugging/runtime protocols
@@ -143,7 +147,10 @@ without requiring privileged mode or additional security options.
 5. Capture source code through debugging APIs (either from exceptions or
    original input)
 6. Prettify captured source using prettify-js library
-7. Output prettified code to file or stdout
+7. Parse the prettified code with tree-sitter to build an AST
+8. Walk the AST to find and decode hex-encoded strings (e.g., `\x74\x6f\x55\x70\x70\x65\x72\x43\x61\x73\x65` → `toUpperCase`)
+9. Apply in-place edits to replace obfuscated content with readable equivalents
+10. Output the cleaned and deobfuscated code to file or stdout
 
 ## Implementation Details
 
@@ -152,11 +159,19 @@ without requiring privileged mode or additional security options.
 - Extracts script source from Chrome's debugging APIs when JavaScript throws
   exceptions
 - Falls back to prettifying original input for successful executions
+- Uses tree-sitter to parse JavaScript into an Abstract Syntax Tree (AST)
+- Performs AST-based deobfuscation by identifying and transforming obfuscated patterns
+- Currently supports hex string decoding (`\x74\x6f` sequences)
+- Preserves original quote styles when making replacements
+- Applies edits in reverse byte order to maintain correct positioning
 - Supports verbose logging for debugging browser interactions
 
 ## Claude Instructions
 
-- This is a working JavaScript prettification tool, not a debugging
+- This is a working JavaScript prettification and deobfuscation tool, not a debugging
   demonstration
 - The Chrome integration is used to capture and prettify JavaScript source code
+- The tree-sitter integration performs AST-based deobfuscation after prettification
 - Focus on the JSCleanifier implementation in src/lib.rs for core functionality
+- The tree walker in src/tree.rs handles deobfuscation patterns and can be extended
+  for additional obfuscation techniques beyond hex string decoding
