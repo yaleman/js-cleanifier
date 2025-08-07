@@ -166,6 +166,15 @@ without requiring privileged mode or additional security options.
 - Applies edits in reverse byte order to maintain correct positioning
 - Supports verbose logging for debugging browser interactions
 
+## Development Guidelines
+
+- **Development Completion Criteria**: 
+  - you aren't done until `just check` passes without errors or warnings
+
+## Testing Guidelines
+
+- When fixing a test, you must ensure that the test continues to validate expected operations
+
 ## Claude Instructions
 
 - This is a working JavaScript prettification and deobfuscation tool, not a debugging
