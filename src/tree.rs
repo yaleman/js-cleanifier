@@ -59,22 +59,20 @@ enum TransformationType {
 }
 
 fn find_transformations(tree: &Tree, source: &[u8]) -> Result<Vec<Transformation>> {
-    let mut transformations = Vec::new();
-
     // Find hex string transformations
-    find_hex_transformations(tree, source, &mut transformations)?;
+    let hex_transformations = find_hex_transformations(tree, source)?;
 
     // Find Uint8Array transformations
-    find_uint8_transformations(tree, source, &mut transformations)?;
+    let uint8_transformations = find_uint8_transformations(tree, source)?;
 
-    Ok(transformations)
+    // Combine all transformations functionally
+    Ok([hex_transformations, uint8_transformations]
+        .into_iter()
+        .flatten()
+        .collect())
 }
 
-fn find_hex_transformations(
-    tree: &Tree,
-    source: &[u8],
-    transformations: &mut Vec<Transformation>,
-) -> Result<()> {
+fn find_hex_transformations(tree: &Tree, source: &[u8]) -> Result<Vec<Transformation>> {
     let query_str = r#"
         (string) @string
         (#match? @string "\\\\x[0-9a-fA-F]{2}")
@@ -86,6 +84,7 @@ fn find_hex_transformations(
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, tree.root_node(), source);
+    let mut transformations = Vec::new();
 
     while let Some(query_match) = matches.next() {
         for capture in query_match.captures {
@@ -105,14 +104,10 @@ fn find_hex_transformations(
         }
     }
 
-    Ok(())
+    Ok(transformations)
 }
 
-fn find_uint8_transformations(
-    tree: &Tree,
-    source: &[u8],
-    transformations: &mut Vec<Transformation>,
-) -> Result<()> {
+fn find_uint8_transformations(tree: &Tree, source: &[u8]) -> Result<Vec<Transformation>> {
     let query_str = r#"
         (new_expression
           constructor: (identifier) @constructor
@@ -128,6 +123,7 @@ fn find_uint8_transformations(
 
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&query, tree.root_node(), source);
+    let mut transformations = Vec::new();
 
     while let Some(query_match) = matches.next() {
         let mut new_expr_node = None;
@@ -171,7 +167,7 @@ fn find_uint8_transformations(
         }
     }
 
-    Ok(())
+    Ok(transformations)
 }
 
 /// Reconstruct source by walking the AST and applying transformations
