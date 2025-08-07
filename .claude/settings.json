@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cargo check --quiet"
+          },
+          {
+            "type": "command",
+            "command": "cargo clippy --all-targets --quiet"
+          }
+        ]
+      }
+    ]
+  }
+}

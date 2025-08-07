@@ -116,7 +116,8 @@ async fn test_output_to_stdout() -> Result<()> {
 
     // Should contain prettified JavaScript
     assert!(
-        result.contains("function") && result.contains("console.log"),
+        result.prettified_code.contains("function")
+            && result.prettified_code.contains("console.log"),
         "Output should contain the prettified JavaScript function"
     );
 
@@ -139,9 +140,12 @@ async fn test_verbose_flag() -> Result<()> {
     let result = cleanifier.cleanify_file(&testfile_path, false).await?;
 
     // Should succeed and produce valid output
-    assert!(!result.is_empty(), "Result should not be empty");
     assert!(
-        result.contains("function"),
+        !result.prettified_code.is_empty(),
+        "Result should not be empty"
+    );
+    assert!(
+        result.prettified_code.contains("function"),
         "Result should contain function"
     );
 

@@ -1,6 +1,10 @@
 pub mod tree;
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use chromiumoxide::{
@@ -8,13 +12,14 @@ use chromiumoxide::{
     browser::HeadlessMode,
     cdp::js_protocol::{
         debugger::{GetScriptSourceParams, SetBreakpointByUrlParams},
-        runtime::ScriptId,
+        runtime::{EnableParams as RuntimeEnableParams, EventConsoleApiCalled, ScriptId},
     },
     error::CdpError,
 };
 use clap::Parser;
 use futures_util::stream::StreamExt;
 use prettify_js::prettyprint;
+use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use crate::tree::tree_walker;
@@ -58,6 +63,13 @@ pub struct JSCleanifier {
     browser: Option<Browser>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct CleanifyResult {
+    pub console_messages: Arc<RwLock<Vec<String>>>,
+    pub prettified_code: String,
+    pub scripts: HashMap<ScriptId, Option<String>>,
+}
+
 impl JSCleanifier {
     pub async fn initialize(&mut self, config: &CleanifyOptions) -> Result<()> {
         info!("Starting Chromiumoxide Debugger...");
@@ -99,7 +111,11 @@ impl JSCleanifier {
         Ok(())
     }
 
-    pub async fn cleanify_js_code(&self, js_code: &str, try_harder: bool) -> Result<String> {
+    pub async fn cleanify_js_code(
+        &self,
+        js_code: &str,
+        try_harder: bool,
+    ) -> Result<CleanifyResult> {
         let browser = self
             .browser
             .as_ref()
@@ -107,9 +123,41 @@ impl JSCleanifier {
 
         let page = browser.new_page("about:blank").await?;
 
-        // Enable debugging
+        // Enable debugging and runtime
         page.enable_debugger().await?;
         page.enable_runtime().await?;
+
+        // Enable console API by sending Runtime.enable with console API enabled
+        let runtime_params = RuntimeEnableParams::default();
+        page.execute(runtime_params).await?;
+
+        // Listen for console API calls
+        let mut console_events = page.event_listener::<EventConsoleApiCalled>().await?;
+
+        let mut result = CleanifyResult::default();
+
+        let console_messages_ref = result.console_messages.clone();
+        // Spawn a task to handle console events
+        tokio::spawn(async move {
+            while let Some(event) = console_events.next().await {
+                let value = event.args.first().and_then(|arg| arg.value.clone());
+                info!(
+                    "Console {:?}: {:?}",
+                    event.r#type,
+                    value.map(|v| v.to_string()).unwrap_or("".into())
+                );
+                let mut console_messages = console_messages_ref.write().await;
+                console_messages.push(format!(
+                    "{:?}: {:?}",
+                    event.r#type,
+                    event
+                        .args
+                        .iter()
+                        .map(|arg| arg.value.clone())
+                        .collect::<Vec<_>>()
+                ));
+            }
+        });
 
         // Set breakpoint
         let breakpoint = SetBreakpointByUrlParams::builder()
@@ -134,37 +182,25 @@ impl JSCleanifier {
                             }
                         };
                         if try_harder {
-                            let mut collected_source = String::new();
-                            let mut found_any = false;
-
                             for script_id_num in 0..1024 {
                                 let script_id = ScriptId::from(script_id_num.to_string());
                                 let source_params = GetScriptSourceParams::new(script_id.clone());
 
                                 if let Ok(source) = page.execute(source_params).await {
-                                    if !source.script_source.is_empty() {
+                                    if source.script_source.is_empty() {
+                                        result.scripts.insert(script_id, None);
+                                    } else {
                                         info!("Found source code for script ID: {script_id:?}");
-                                        collected_source
-                                            .push_str(&format!("// Script ID: {script_id:?}\n\n"));
                                         let (source, _source_map) =
                                             prettyprint(&source.script_source);
-                                        collected_source.push_str(&source);
-
-                                        collected_source.push_str("\n\n");
-                                        found_any = true;
+                                        result.scripts.insert(script_id, Some(source));
                                     }
                                 }
                             }
 
-                            if !found_any {
-                                error!("No source code found after trying script IDs 0..128");
-                                return Err(anyhow::anyhow!(
-                                    "No source code found after trying script IDs 0..128"
-                                ));
-                            }
                             info!("Collected source code from multiple script IDs");
 
-                            Ok(collected_source)
+                            Ok(result)
                         } else {
                             let source_params = GetScriptSourceParams::new(script_id.clone());
                             let source = page.execute(source_params).await?;
@@ -179,7 +215,8 @@ impl JSCleanifier {
 
                             // Prettify the JavaScript source code
                             let (prettified, _source_mappings) = prettyprint(&source.script_source);
-                            Ok(prettified)
+                            result.prettified_code = prettified;
+                            Ok(result)
                         }
                     }
                     _ => {
@@ -190,19 +227,21 @@ impl JSCleanifier {
             }
             Ok(val) => {
                 debug!("JavaScript executed successfully: {val:?}");
-                info!("JavaScript execution completed, prettifying source code...");
-
-                // For successful execution, we'll prettify the original code since we have it
-                info!("Prettifying the original JavaScript code");
+                debug!("Prettifying the original JavaScript code");
 
                 // Prettify the JavaScript source code
                 let (prettified, _source_mappings) = prettyprint(js_code);
-                Ok(prettified)
+                result.prettified_code = prettified;
+                Ok(result)
             }
         }
     }
 
-    pub async fn cleanify_file(&self, input_path: &PathBuf, try_harder: bool) -> Result<String> {
+    pub async fn cleanify_file(
+        &self,
+        input_path: &PathBuf,
+        try_harder: bool,
+    ) -> Result<CleanifyResult> {
         let js_code = tokio::fs::read_to_string(input_path).await?;
         self.cleanify_js_code(&js_code, try_harder).await
     }
@@ -213,20 +252,38 @@ impl JSCleanifier {
         options: &CleanifyOptions,
     ) -> Result<()> {
         let prettified = self.cleanify_file(input_path, options.try_harder).await?;
-
-        let prettified = tree_walker(&prettified).map_err(|e| {
-            error!("Failed to walk the tree: {}", e);
-            anyhow::anyhow!("Tree walking failed: {}", e)
-        })?;
+        let mut output_string = String::new();
+        if !prettified.prettified_code.is_empty() {
+            output_string = tree_walker(&prettified.prettified_code).map_err(|e| {
+                error!("Failed to walk the tree: {}", e);
+                anyhow::anyhow!("Tree walking failed: {}", e)
+            })?;
+        } else {
+            for (script_id, source) in &prettified.scripts {
+                if let Some(source_code) = source {
+                    let (prettified_code, _source_mappings) = prettyprint(source_code);
+                    output_string.push_str(&format!(
+                        "\n// Prettified source code for script ID: {}\n\n",
+                        script_id.inner()
+                    ));
+                    output_string.push_str(&prettified_code);
+                    output_string.push_str("\n\n");
+                } else {
+                    output_string.push_str(&format!(
+                        "\n// No source code found for script ID: {script_id:?}\n\n"
+                    ));
+                }
+            }
+        }
 
         if let Some(output_path) = &options.output {
             // Write prettified code to output file
-            tokio::fs::write(output_path, prettified.clone())
+            tokio::fs::write(output_path, output_string)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to write to output file: {}", e))?;
         } else {
             info!("Successfully prettified JavaScript code");
-            println!("{prettified}");
+            println!("{output_string}");
         }
 
         Ok(())

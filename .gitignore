@@ -7,4 +7,6 @@
 *.asc
 target/
 *.js
+!tests/*.js
 *.html
+*.gz

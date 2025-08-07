@@ -16,13 +16,16 @@ async fn test_simple_js_code_direct() -> Result<()> {
     let result = cleanifier.cleanify_js_code(simple_js, false).await?;
 
     // The result should be prettified JavaScript
-    assert!(!result.is_empty(), "Result should not be empty");
     assert!(
-        result.contains("function"),
+        !result.prettified_code.is_empty(),
+        "Result should not be empty"
+    );
+    assert!(
+        result.prettified_code.contains("function"),
         "Result should contain function keyword"
     );
     assert!(
-        result.contains("console.log"),
+        result.prettified_code.contains("console.log"),
         "Result should contain console.log"
     );
 
@@ -31,9 +34,9 @@ async fn test_simple_js_code_direct() -> Result<()> {
     println!(
         "Input length: {}, Output length: {}",
         simple_js.len(),
-        result.len()
+        result.prettified_code.len()
     );
-    println!("Output: {result}");
+    println!("Output: {result:?}");
 
     Ok(())
 }
@@ -52,17 +55,20 @@ async fn test_simple_js_file_direct() -> Result<()> {
     let result = cleanifier.cleanify_file(&testfile_path, false).await?;
 
     // The result should be prettified JavaScript
-    assert!(!result.is_empty(), "Result should not be empty");
     assert!(
-        result.contains("function"),
+        !result.prettified_code.is_empty(),
+        "Result should not be empty"
+    );
+    assert!(
+        result.prettified_code.contains("function"),
         "Result should contain function keyword"
     );
     assert!(
-        result.contains("hello_world"),
+        result.prettified_code.contains("hello_world"),
         "Result should contain function name"
     );
     assert!(
-        result.contains("console.log"),
+        result.prettified_code.contains("console.log"),
         "Result should contain console.log"
     );
 
@@ -113,8 +119,14 @@ async fn test_verbose_option() -> Result<()> {
 
     let result = cleanifier.cleanify_js_code(simple_js, false).await?;
 
-    assert!(!result.is_empty(), "Result should not be empty");
-    assert!(result.contains("console"), "Result should contain console");
+    assert!(
+        !result.prettified_code.is_empty(),
+        "Result should not be empty"
+    );
+    assert!(
+        result.prettified_code.contains("console"),
+        "Result should contain console"
+    );
 
     Ok(())
 }
@@ -133,7 +145,7 @@ async fn test_malformed_js() -> Result<()> {
     match result {
         Ok(prettified) => {
             assert!(
-                !prettified.is_empty(),
+                !prettified.prettified_code.is_empty(),
                 "Even malformed JS should produce some output"
             );
         }
@@ -159,7 +171,7 @@ async fn test_empty_js() -> Result<()> {
     match result {
         Ok(prettified) => {
             // Empty input might produce empty or minimal output
-            println!("Empty JS result: '{prettified}'");
+            println!("Empty JS result: '{prettified:?}'");
         }
         Err(e) => {
             // Graceful error handling is acceptable
@@ -223,13 +235,22 @@ async function asyncFunc() {
 
     let result = cleanifier.cleanify_js_code(complex_js, false).await?;
 
-    assert!(!result.is_empty(), "Result should not be empty");
     assert!(
-        result.contains("function"),
+        !result.prettified_code.is_empty(),
+        "Result should not be empty"
+    );
+    assert!(
+        result.prettified_code.contains("function"),
         "Result should contain function"
     );
-    assert!(result.contains("async"), "Result should contain async");
-    assert!(result.contains("const"), "Result should contain const");
+    assert!(
+        result.prettified_code.contains("async"),
+        "Result should contain async"
+    );
+    assert!(
+        result.prettified_code.contains("const"),
+        "Result should contain const"
+    );
 
     Ok(())
 }
