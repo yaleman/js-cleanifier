@@ -1,15 +1,9 @@
 use anyhow::Result;
-use tracing::{debug, error};
-use tree_sitter::StreamingIteratorMut as _;
+use tracing::debug;
+use tree_sitter::StreamingIterator;
 use tree_sitter::{Node, Parser, Query, QueryCursor, Tree};
 
-#[derive(Debug, Clone)]
-pub struct NodeEdit {
-    pub start_byte: usize,
-    pub end_byte: usize,
-    pub replacement: String,
-}
-
+/// The main handler which takes source code as input
 pub fn tree_walker(src: &str) -> Result<String> {
     let mut parser = Parser::new();
     let language = tree_sitter_javascript::LANGUAGE;
@@ -21,128 +15,228 @@ pub fn tree_walker(src: &str) -> Result<String> {
         .parse(src, None)
         .ok_or_else(|| anyhow::anyhow!("Failed to parse JavaScript"))?;
 
-    let mut edits = find_and_edit_nodes(&tree, src.as_bytes())?;
-
-    // Also find and decode Uint8Arrays
-    let uint8_edits = find_and_decode_uint8arrays(&tree, src.as_bytes())?;
-    edits.extend(uint8_edits);
-
-    // Sort edits by start position (reverse order for applying)
-    edits.sort_by(|a, b| a.start_byte.cmp(&b.start_byte));
-
-    // Apply edits in reverse order to maintain byte positions
-    let mut result = src.to_string();
-    for edit in edits.into_iter().rev() {
-        result.replace_range(edit.start_byte..edit.end_byte, &edit.replacement);
-    }
-
-    Ok(result)
+    // Use incremental parsing approach instead of string replacements
+    apply_tree_transformations(src, &tree, &mut parser)
 }
 
-fn find_and_edit_nodes(tree: &Tree, source: &[u8]) -> Result<Vec<NodeEdit>> {
-    let mut edits = Vec::new();
-    let root_node = tree.root_node();
+/// Apply transformations by reconstructing source from the AST
+fn apply_tree_transformations(src: &str, tree: &Tree, _parser: &mut Parser) -> Result<String> {
+    // Find all nodes that need transformation
+    let transformations = find_transformations(tree, src.as_bytes())?;
 
-    // Query for string literals and template literals that we want to edit
+    if transformations.is_empty() {
+        return Ok(src.to_string());
+    }
+
+    debug!("Found {} transformations to apply", transformations.len());
+
+    // Reconstruct the source by walking the tree and applying transformations
+    let mut output = String::new();
+    reconstruct_source_with_transformations(
+        tree.root_node(),
+        src.as_bytes(),
+        &transformations,
+        &mut output,
+    )?;
+
+    Ok(output)
+}
+
+/// Find all transformations needed without applying them yet
+#[derive(Debug)]
+struct Transformation {
+    node_id: usize,
+    transformation_type: TransformationType,
+    replacement: String,
+}
+
+#[derive(Debug)]
+enum TransformationType {
+    /// Replace the entire node content
+    ReplaceNode,
+    /// Insert content after the node
+    InsertAfter,
+}
+
+fn find_transformations(tree: &Tree, source: &[u8]) -> Result<Vec<Transformation>> {
+    let mut transformations = Vec::new();
+
+    // Find hex string transformations
+    find_hex_transformations(tree, source, &mut transformations)?;
+
+    // Find Uint8Array transformations
+    find_uint8_transformations(tree, source, &mut transformations)?;
+
+    Ok(transformations)
+}
+
+fn find_hex_transformations(
+    tree: &Tree,
+    source: &[u8],
+    transformations: &mut Vec<Transformation>,
+) -> Result<()> {
     let query_str = r#"
         (string) @string
-        (template_string) @template
-        (comment) @comment
-        (regex) @regex
+        (#match? @string "\\\\x[0-9a-fA-F]{2}")
     "#;
 
     let language = tree_sitter_javascript::LANGUAGE;
     let query = Query::new(&language.into(), query_str)
-        .map_err(|e| anyhow::anyhow!("Failed to create query: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to create hex query: {}", e))?;
 
     let mut cursor = QueryCursor::new();
-    let query_matches = cursor.matches(&query, root_node, source);
+    let mut matches = cursor.matches(&query, tree.root_node(), source);
 
-    let _res: Result<Vec<_>, _> = query_matches
-        .map_deref_mut(|found| {
-            for capture in found.captures {
-                let node = capture.node;
-                let text = match node.utf8_text(source) {
-                    Ok(text) => text,
-                    Err(e) => {
-                        error!("Failed to get node text: {e}");
-                        return Err(anyhow::anyhow!("Failed to get node text: {}", e));
-                    }
-                };
+    while let Some(query_match) = matches.next() {
+        for capture in query_match.captures {
+            let node = capture.node;
+            let text = node
+                .utf8_text(source)
+                .map_err(|e| anyhow::anyhow!("Failed to get node text: {}", e))?;
 
-                // Decide what to do with this node based on its content
-                if let Some(replacement) = process_node_content(&node, text) {
-                    edits.push(NodeEdit {
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        replacement,
-                    });
-                }
+            if let Some(decoded) = decode_hex_string(text) {
+                debug!("Found hex string to transform: {} -> {}", text, decoded);
+                transformations.push(Transformation {
+                    node_id: node.id(),
+                    transformation_type: TransformationType::ReplaceNode,
+                    replacement: decoded,
+                });
             }
-            Ok(())
-        })
-        .collect();
-    let _ = _res;
-
-    // Also walk the tree manually to catch any additional nodes that need editing
-    walk_tree_for_edits(&root_node, source, &mut edits)?;
-
-    // Sort edits by start position (reverse order for applying)
-    edits.sort_by(|a, b| a.start_byte.cmp(&b.start_byte));
-
-    Ok(edits)
-}
-
-fn process_node_content(node: &Node, text: &str) -> Option<String> {
-    // Check for hex-encoded strings and decode them regardless of node type
-    if let Some(decoded) = decode_hex_string(text) {
-        return Some(decoded);
-    }
-
-    // Check for Uint8Array new expressions
-    if node.kind() == "new_expression" && text.contains("Uint8Array") {
-        // Try to find the array and decode it
-        if let Some(decoded_comment) = try_decode_uint8array_node(node, text) {
-            return Some(format!("{text} /* {decoded_comment} */"));
         }
-    }
-
-    None
-}
-
-fn walk_tree_for_edits(node: &Node, source: &[u8], edits: &mut Vec<NodeEdit>) -> Result<()> {
-    // Check if this node needs editing based on custom logic
-    if should_edit_node(node) {
-        let text = node
-            .utf8_text(source)
-            .map_err(|e| anyhow::anyhow!("Failed to get node text: {}", e))?;
-
-        if let Some(replacement) = process_node_content(node, text) {
-            edits.push(NodeEdit {
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                replacement,
-            });
-        }
-    }
-
-    // Recursively walk children
-    for child in node.children(&mut node.walk()) {
-        walk_tree_for_edits(&child, source, edits)?;
     }
 
     Ok(())
 }
 
-fn should_edit_node(node: &Node) -> bool {
-    debug!("Checking node: {:?}", node.kind());
-    matches!(
-        node.kind(),
-        "string" | "template_string" | "comment" | "regex" | "identifier" // Removed new_expression to avoid duplicates
-    )
+fn find_uint8_transformations(
+    tree: &Tree,
+    source: &[u8],
+    transformations: &mut Vec<Transformation>,
+) -> Result<()> {
+    let query_str = r#"
+        (new_expression
+          constructor: (identifier) @constructor
+          arguments: (arguments 
+            (array) @array
+          )
+        ) @new_expr
+    "#;
+
+    let language = tree_sitter_javascript::LANGUAGE;
+    let query = Query::new(&language.into(), query_str)
+        .map_err(|e| anyhow::anyhow!("Failed to create Uint8Array query: {}", e))?;
+
+    let mut cursor = QueryCursor::new();
+    let mut matches = cursor.matches(&query, tree.root_node(), source);
+
+    while let Some(query_match) = matches.next() {
+        let mut new_expr_node = None;
+        let mut constructor_node = None;
+        let mut array_node = None;
+
+        for capture in query_match.captures {
+            let capture_name = query.capture_names()[capture.index as usize];
+            match capture_name {
+                "new_expr" => new_expr_node = Some(capture.node),
+                "constructor" => constructor_node = Some(capture.node),
+                "array" => array_node = Some(capture.node),
+                _ => {}
+            }
+        }
+
+        if let (Some(new_expr), Some(constructor), Some(array)) =
+            (new_expr_node, constructor_node, array_node)
+        {
+            let constructor_text = constructor
+                .utf8_text(source)
+                .map_err(|e| anyhow::anyhow!("Failed to get constructor text: {}", e))?;
+
+            if constructor_text == "Uint8Array" {
+                let array_text = array
+                    .utf8_text(source)
+                    .map_err(|e| anyhow::anyhow!("Failed to get array text: {}", e))?;
+
+                if let Some(decoded_string) = decode_uint8array_to_string(array_text) {
+                    debug!(
+                        "Found Uint8Array to transform: {} -> {}",
+                        array_text, decoded_string
+                    );
+                    transformations.push(Transformation {
+                        node_id: new_expr.id(),
+                        transformation_type: TransformationType::InsertAfter,
+                        replacement: format!(" /* decoded: \"{decoded_string}\" */"),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
-// Helper function to extract content from string literals (for analysis)
+/// Reconstruct source by walking the AST and applying transformations
+fn reconstruct_source_with_transformations(
+    node: Node,
+    source: &[u8],
+    transformations: &[Transformation],
+    output: &mut String,
+) -> Result<()> {
+    // Check if this node has a transformation
+    let transform = transformations.iter().find(|t| t.node_id == node.id());
+
+    if let Some(transform) = transform {
+        match transform.transformation_type {
+            TransformationType::ReplaceNode => {
+                // Replace the entire node with the transformation
+                output.push_str(&transform.replacement);
+                return Ok(());
+            }
+            TransformationType::InsertAfter => {
+                // Process the node normally, then add the transformation
+                if node.child_count() == 0 {
+                    // Leaf node - add its text
+                    let text = node
+                        .utf8_text(source)
+                        .map_err(|e| anyhow::anyhow!("Failed to get leaf node text: {}", e))?;
+                    output.push_str(text);
+                } else {
+                    // Process children recursively
+                    let mut cursor = node.walk();
+                    for child in node.children(&mut cursor) {
+                        reconstruct_source_with_transformations(
+                            child,
+                            source,
+                            transformations,
+                            output,
+                        )?;
+                    }
+                }
+                // Add the transformation after the node
+                output.push_str(&transform.replacement);
+                return Ok(());
+            }
+        }
+    }
+
+    // No transformation - process the node normally
+    if node.child_count() == 0 {
+        // Leaf node - add its text as-is
+        let text = node
+            .utf8_text(source)
+            .map_err(|e| anyhow::anyhow!("Failed to get leaf node text: {}", e))?;
+        output.push_str(text);
+    } else {
+        // Recursively process children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            reconstruct_source_with_transformations(child, source, transformations, output)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Helper function to extract content from string literals (for analysis)
 pub fn extract_string_content(text: &str) -> String {
     let text = text.trim();
 
@@ -165,117 +259,8 @@ pub fn extract_string_content(text: &str) -> String {
     }
 }
 
-pub fn find_and_decode_uint8arrays(tree: &Tree, source: &[u8]) -> Result<Vec<NodeEdit>> {
-    let mut edits = Vec::new();
-    let root_node = tree.root_node();
-
-    // Query for Uint8Array constructor calls
-    let query_str = r#"
-        (new_expression) @new_expr
-    "#;
-
-    let language = tree_sitter_javascript::LANGUAGE;
-    let query = Query::new(&language.into(), query_str)
-        .map_err(|e| anyhow::anyhow!("Failed to create Uint8Array query: {}", e))?;
-
-    let mut cursor = QueryCursor::new();
-    let query_matches = cursor.matches(&query, root_node, source);
-
-    debug!("Starting to process query matches for Uint8Arrays...");
-
-    let mut match_count = 0;
-    let _res: Result<Vec<_>, _> = query_matches
-        .map_deref_mut(|found| {
-            match_count += 1;
-            debug!(
-                "Found query match #{} with {} captures",
-                match_count,
-                found.captures.len()
-            );
-            for capture in found.captures {
-                let node = capture.node;
-                let text = match node.utf8_text(source) {
-                    Ok(text) => text,
-                    Err(e) => {
-                        error!("Failed to get node text: {e}");
-                        return Err(anyhow::anyhow!("Failed to get node text: {}", e));
-                    }
-                };
-
-                debug!("Captured node kind: {}, text: {}", node.kind(), text);
-
-                // Check if this is a Uint8Array constructor or function call
-                if let Some(comment) = process_uint8array_for_comment(&node, text, source)? {
-                    debug!("Adding comment: {}", comment);
-                    // Add comment after the entire expression
-                    edits.push(NodeEdit {
-                        start_byte: node.end_byte(),
-                        end_byte: node.end_byte(),
-                        replacement: format!(" /* {comment} */",),
-                    });
-                } else {
-                    debug!("No comment generated for node: {}", text);
-                }
-            }
-            Ok(())
-        })
-        .collect();
-    let _ = _res;
-
-    debug!("Total matches processed: {}", match_count);
-    Ok(edits)
-}
-
-fn process_uint8array_for_comment(
-    node: &Node,
-    text: &str,
-    source: &[u8],
-) -> Result<Option<String>> {
-    // Check if this is a Uint8Array constructor
-    if !text.contains("Uint8Array") {
-        return Ok(None);
-    }
-
-    // Find the constructor/function name and array argument
-    let mut constructor_name = None;
-    let mut array_node = None;
-
-    for child in node.children(&mut node.walk()) {
-        match child.kind() {
-            "identifier" => {
-                let name = child.utf8_text(source)?;
-                if name == "Uint8Array" {
-                    constructor_name = Some(name);
-                }
-            }
-            "arguments" => {
-                // Look for array inside arguments
-                for arg_child in child.children(&mut child.walk()) {
-                    if arg_child.kind() == "array" {
-                        array_node = Some(arg_child);
-                        break;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if constructor_name.is_some() && array_node.is_some() {
-        let array_node = array_node.unwrap();
-        let array_text = array_node.utf8_text(source)?;
-
-        if let Some(decoded_string) = decode_uint8array_to_string(array_text) {
-            debug!("Decoded Uint8Array: {array_text} -> {decoded_string}");
-            return Ok(Some(format!("decoded: \"{decoded_string}\"")));
-        }
-    }
-
-    Ok(None)
-}
-
+/// Parse array like [72, 101, 108, 108, 111] into string
 pub fn decode_uint8array_to_string(array_text: &str) -> Option<String> {
-    // Parse array like [72, 101, 108, 108, 111] into string
     // Handle arrays that span multiple lines with whitespace
     let content = array_text.trim();
     if !content.starts_with('[') || !content.ends_with(']') {
@@ -310,24 +295,6 @@ pub fn decode_uint8array_to_string(array_text: &str) -> Option<String> {
         }
         Err(_) => None,
     }
-}
-
-fn try_decode_uint8array_node(_node: &Node, text: &str) -> Option<String> {
-    // Extract array content from the new expression text
-    // Look for pattern like: new Uint8Array([67, 68, 65, 84, 65, 91])
-    if let Some(start) = text.find('[') {
-        if let Some(end) = text.rfind(']') {
-            let array_text = &text[start..=end];
-            if let Some(decoded) = decode_uint8array_to_string(array_text) {
-                debug!(
-                    "Decoded Uint8Array in new expression: {} -> {}",
-                    array_text, decoded
-                );
-                return Some(format!("decoded: \"{decoded}\""));
-            }
-        }
-    }
-    None
 }
 
 fn decode_hex_string(text: &str) -> Option<String> {
