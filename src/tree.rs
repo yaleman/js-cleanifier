@@ -1,5 +1,5 @@
 use anyhow::Result;
-use tracing::error;
+use tracing::{debug, error};
 use tree_sitter::StreamingIteratorMut as _;
 use tree_sitter::{Node, Parser, Query, QueryCursor, Tree};
 
@@ -119,6 +119,7 @@ fn walk_tree_for_edits(node: &Node, source: &[u8], edits: &mut Vec<NodeEdit>) ->
 }
 
 fn should_edit_node(node: &Node) -> bool {
+    debug!("Checking node: {:?}", node.kind());
     matches!(
         node.kind(),
         "string" | "template_string" | "comment" | "regex" | "identifier" // Could also edit variable names, etc.

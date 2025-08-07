@@ -11,9 +11,9 @@ async fn main() -> Result<()> {
 
     // Initialize tracing based on verbose flag
     let filter = if opts.verbose {
-        EnvFilter::new("js_cleanifier=info")
+        EnvFilter::new("js_cleanifier=debug")
     } else {
-        EnvFilter::new("js_cleanifier=error,chromiumoxide=off")
+        EnvFilter::new("js_cleanifier=info,chromiumoxide=off")
     };
 
     tracing_subscriber::fmt()
