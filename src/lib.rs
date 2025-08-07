@@ -2,6 +2,7 @@ pub mod tree;
 
 use std::{
     collections::HashMap,
+    io,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -21,8 +22,29 @@ use futures_util::stream::StreamExt;
 use prettify_js::prettyprint;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
+use tracing_subscriber::EnvFilter;
 
 use crate::tree::tree_walker;
+
+pub fn start_logging(verbose: bool) -> Result<()> {
+    // Initialize tracing based on verbose flag
+    let filter = if verbose {
+        EnvFilter::new("js_cleanifier=debug")
+    } else {
+        EnvFilter::new("js_cleanifier=info,chromiumoxide=off")
+    };
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .with_level(true)
+        .with_writer(io::stderr)
+        .try_init()
+        .map_err(|e| {
+            eprintln!("Failed to initialize logging: {e}");
+            anyhow::anyhow!("Logging initialization failed: {}", e)
+        })
+}
 
 #[derive(Debug, Clone, Parser, Default)]
 pub struct CleanifyOptions {

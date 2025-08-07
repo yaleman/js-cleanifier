@@ -1,27 +1,12 @@
-use std::io;
-
 use anyhow::Result;
 use clap::Parser;
-use js_cleanifier::{CleanifyOptions, JSCleanifier};
-use tracing_subscriber::EnvFilter;
+use js_cleanifier::{CleanifyOptions, JSCleanifier, start_logging};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts = CleanifyOptions::parse();
 
-    // Initialize tracing based on verbose flag
-    let filter = if opts.verbose {
-        EnvFilter::new("js_cleanifier=debug")
-    } else {
-        EnvFilter::new("js_cleanifier=info,chromiumoxide=off")
-    };
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .with_level(true)
-        .with_writer(io::stderr)
-        .init();
+    start_logging(opts.verbose)?;
 
     let mut cleanifier = JSCleanifier::default();
     cleanifier.initialize(&opts).await?;
