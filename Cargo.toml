@@ -12,7 +12,7 @@ name = "js_cleanifier"
 path = "src/lib.rs"
 
 [dependencies]
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 chromiumoxide = { version = "0.8.0", features = ["tokio"] }
 clap = { version = "4.5.56", features = ["derive", "env"] }
 futures-util = "0.3.31"
