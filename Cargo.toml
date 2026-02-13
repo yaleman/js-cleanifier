@@ -18,7 +18,7 @@ clap = { version = "4.5.57", features = ["derive", "env"] }
 futures-util = "0.3.31"
 prettify-js = "0.1.0"
 serde_json = "1.0.149"
-tempfile = "3.24.0"
+tempfile = "3.25.0"
 tokio = { version = "1.49.0", features = ["macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -26,5 +26,5 @@ tree-sitter = "0.26.5"
 tree-sitter-javascript = "0.25.0"
 
 [dev-dependencies]
-tempfile = "3.24.0"
+tempfile = "3.25.0"
 tokio-test = "0.4.5"
