@@ -10,3 +10,4 @@ target/
 !tests/*.js
 *.html
 *.gz
+*.wasm
