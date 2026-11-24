@@ -87,7 +87,7 @@ fn find_hex_transformations(tree: &Tree, source: &[u8]) -> Result<Vec<Transforma
     let mut transformations = Vec::new();
 
     while let Some(query_match) = matches.next() {
-        for capture in query_match.captures {
+        for capture in query_match.captures() {
             let node = capture.node;
             let text = node
                 .utf8_text(source)
@@ -130,7 +130,7 @@ fn find_uint8_transformations(tree: &Tree, source: &[u8]) -> Result<Vec<Transfor
         let mut constructor_node = None;
         let mut array_node = None;
 
-        for capture in query_match.captures {
+        for capture in query_match.captures() {
             let capture_name = query.capture_names()[capture.index as usize];
             match capture_name {
                 "new_expr" => new_expr_node = Some(capture.node),
