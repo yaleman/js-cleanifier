@@ -37,7 +37,7 @@ pub fn apply_tree_edits(
 
     // Sort edits by position (reverse order for applying)
     let mut sorted_edits = edits;
-    sorted_edits.sort_by(|a, b| a.start_byte.cmp(&b.start_byte));
+    sorted_edits.sort_by_key(|a| a.start_byte);
 
     // Apply edits and incrementally reparse
     for edit in sorted_edits.into_iter().rev() {
@@ -94,7 +94,7 @@ pub fn find_uint8arrays_with_context(
         let mut array_node = None;
         let mut byte_nodes = Vec::new();
 
-        for capture in query_match.captures {
+        for capture in query_match.captures() {
             match query.capture_names()[capture.index as usize] {
                 "new_expr" => new_expr_node = Some(capture.node),
                 "array" => array_node = Some(capture.node),
@@ -141,7 +141,7 @@ pub fn transform_hex_strings_structurally(
 
     let mut matches = cursor.matches(&query, tree.root_node(), source);
     while let Some(query_match) = matches.next() {
-        for capture in query_match.captures {
+        for capture in query_match.captures() {
             let node = capture.node;
             let text = node.utf8_text(source)?;
 
